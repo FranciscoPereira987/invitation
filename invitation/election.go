@@ -145,7 +145,25 @@ func (st *Status) accept(peer uint) error {
 	if err := writeTo(acc, st.dial, st.getPeer(peer)); err != nil {
 		return err
 	}
+	st.change()
 	st.peers.Members = make([]uint, 0)
+	return nil
+}
+
+/*
+Sends change message to all members of the group
+*/
+func (st *Status) change() error {
+	ch := change{
+		NewLeaderId: st.leaderId,
+	}
+
+	for _, member := range st.peers.Members {
+		if err := writeTo(ch, st.dial, st.getPeer(member)); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

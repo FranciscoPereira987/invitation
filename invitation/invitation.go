@@ -68,6 +68,7 @@ func (st *Status) Run() (err error) {
 	for err == nil {
 		switch state {
 		case Electing:
+			//Runninng an election
 			st.leaderId = st.id
 			state, err = st.runElection()
 		case Coordinator:

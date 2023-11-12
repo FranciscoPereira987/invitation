@@ -115,7 +115,6 @@ func main4() {
 }
 
 func main() {
-	//time.Sleep(time.Second * 10)
 	logrus.Info("Starting")
-	main2()
+	main4()
 }

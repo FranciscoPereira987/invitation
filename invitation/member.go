@@ -14,10 +14,18 @@ func (st *Status) ActAsMember() (uint, error) {
 	if err == nil {
 		switch msg[0] {
 		case Invite:
-			logrus.Infof("action: acting as member | status: recieved invite from: %s", addr.String())
-			err = writeTo(reject{
+			inv, _ := deserializeInv(msg[1:])
+			var msg serializable = reject{
 				LeaderId: st.leaderId,
-			}, st.dial, addr.String())
+			}
+			if inv.Id == st.leaderId {
+				msg = accept{
+					0,
+					st.peers.Members,
+				}
+			}
+			logrus.Infof("action: acting as member | status: recieved invite from: %s", addr.String())
+			err = writeTo(msg, st.dial, addr.String())
 		case Change:
 			ch, err := deserializeChange(msg[1:])
 			if err == nil {
