@@ -54,12 +54,12 @@ type Status struct {
 	leaderId uint
 }
 
-func Invitation(peers []uint, id uint, mapping map[uint]string, conn *net.UDPConn) *Status {
+func Invitation(config *Config) *Status {
 	return &Status{
-		peers:    utils.NewPeers(peers, mapping),
-		id:       id,
-		dial:     conn,
-		leaderId: id,
+		peers:    utils.NewPeers(config.Peers, config.Mapping),
+		id:       config.Id,
+		dial:     config.Conn,
+		leaderId: config.Id,
 	}
 }
 

@@ -1,120 +1,69 @@
 package main
 
 import (
+	"errors"
 	"invitation/invitation"
-	"log"
-	"net"
-	"time"
+	"invitation/utils"
 
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 )
 
-func ping_pong(at, peer, message string) error {
-	addr, err := net.ResolveUDPAddr("udp", at)
+const (
+	Name        = "name"
+	NetPort     = "net_port"
+	Peers       = "peers"
+	PeerName    = "peer_name"
+	PeerNetName = "net_name"
+)
 
-	if err != nil {
-		return err
-	}
+var (
+	InvalidPeerNameErr    = errors.New("invalid peer name")
+	InvalidPeerNetNameErr = errors.New("invalid peer net name")
+)
 
-	peerAddr, err := net.ResolveUDPAddr("udp", peer)
+func parseConfig(v *viper.Viper) (config *invitation.Config, err error) {
+	port := v.GetString(NetPort)
+	id := v.GetInt32(Name)
 
-	if err != nil {
-		return err
-	}
-
-	sckt, err := net.ListenUDP("udp", addr)
-
-	if err != nil {
-		return err
-	}
-	sleepTime, _ := time.ParseDuration("300ms")
-	for {
-		written, err := sckt.WriteToUDP([]byte(message), peerAddr)
-		log.Printf("Written: %d", written)
-		if err != nil {
-			return err
+	config, err = invitation.NewConfigOn(uint(id), port)
+	if err == nil {
+		mapped := v.Get(Peers).([]interface{})
+		for _, value := range mapped {
+			value := value.(map[string]any)
+			peerName, ok := value[PeerName].(int)
+			if !ok {
+				err = InvalidPeerNameErr
+				return
+			}
+			peerNetName, ok := value[PeerNetName].(string)
+			if !ok {
+				err = InvalidPeerNetNameErr
+				return
+			}
+			if uint(id) != uint(peerName) {
+				config.Mapping[uint(peerName)] = peerNetName + ":" + port
+				config.Peers = append(config.Peers, uint(peerName))
+			}
 		}
-		pong := make([]byte, 4)
-		_, _, _ = sckt.ReadFromUDP(pong)
-		log.Printf("Peer says: %s", string(pong))
-		time.Sleep(sleepTime)
 	}
 
-}
-
-func main1() {
-
-	peers := []uint{2, 3, 4}
-	peerMapping := map[uint]string{
-		2: "127.0.0.1:10000",
-		3: "127.0.0.1:10001",
-		4: "127.0.0.1:10002",
-	}
-	id := 1
-	addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:9999")
-	conn, _ := net.ListenUDP("udp", addr)
-	status := invitation.Invitation(peers, uint(id), peerMapping, conn)
-
-	if err := status.Run(); err != nil {
-		logrus.Fatalf("Error occured during run: %s", err)
-	}
-}
-
-func main2() {
-
-	peers := []uint{1, 3, 4}
-	peerMapping := map[uint]string{
-		1: "127.0.0.1:9999",
-		3: "127.0.0.1:10001",
-		4: "127.0.0.1:10002",
-	}
-	id := 2
-	addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:10000")
-	conn, _ := net.ListenUDP("udp", addr)
-	status := invitation.Invitation(peers, uint(id), peerMapping, conn)
-
-	if err := status.Run(); err != nil {
-		logrus.Fatalf("Error occured during run: %s", err)
-	}
-}
-
-func main3() {
-
-	peers := []uint{4, 2, 1}
-	peerMapping := map[uint]string{
-		1: "127.0.0.1:9999",
-		2: "127.0.0.1:10000",
-		4: "127.0.0.1:10002",
-	}
-	id := 3
-	addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:10001")
-	conn, _ := net.ListenUDP("udp", addr)
-	status := invitation.Invitation(peers, uint(id), peerMapping, conn)
-
-	if err := status.Run(); err != nil {
-		logrus.Fatalf("Error occured during run: %s", err)
-	}
-}
-
-func main4() {
-
-	peers := []uint{1, 2, 3}
-	peerMapping := map[uint]string{
-		2: "127.0.0.1:10000",
-		3: "127.0.0.1:10001",
-		1: "127.0.0.1:9999",
-	}
-	id := 4
-	addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:10002")
-	conn, _ := net.ListenUDP("udp", addr)
-	status := invitation.Invitation(peers, uint(id), peerMapping, conn)
-
-	if err := status.Run(); err != nil {
-		logrus.Fatalf("Error occured during run: %s", err)
-	}
+	return
 }
 
 func main() {
-	logrus.Info("Starting")
-	main1()
+	v, err := utils.InitConfig("INV", "/config")
+	if err != nil {
+		logrus.Errorf("Error parsing config file: %s", err)
+		return
+	}
+
+	config, err := parseConfig(v)
+	if err != nil {
+		logrus.Errorf("Error parsing config file: %s", err)
+	}
+	invitation := invitation.Invitation(config)
+	if err := invitation.Run(); err != nil {
+		logrus.Fatalf("Invitation process ended with error: %s", err)
+	}
 }

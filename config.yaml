@@ -1,0 +1,25 @@
+
+#Port to be used by the service
+net_port: 10000
+
+#All peers, including self
+peers:
+  - peer_name: 1
+    net_name: "peer1"
+  - peer_name: 2
+    net_name: "peer2"
+  - peer_name: 3
+    net_name: "peer3"
+  - peer_name: 4
+    net_name: "peer4"
+  - peer_name: 5
+    net_name: "peer5"
+  - peer_name: 6
+    net_name: "peer6"
+  - peer_name: 7
+    net_name: "peer7"
+  - peer_name: 8
+    net_name: "peer8"
+  - peer_name: 9
+    net_name: "peer9"
+    
