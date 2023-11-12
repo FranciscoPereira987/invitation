@@ -2,24 +2,30 @@ package invitation
 
 import (
 	"invitation/utils"
-	"io"
+	"net"
+	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 /*
 Runs the election, sends only Invites and recieves only Invites
 Anything else is discarded
 */
-func (st *Status) runElection(at io.ReadWriter) (nextStage uint, err error) {
-	backoff := utils.BackoffFrom(int(st.id))
-	channel := utils.NewChannelReader(at)
-	missing := utils.NewChooser(st.peers)
+func (st *Status) runElection() (nextStage uint, err error) {
+	missing := utils.NewChooser(st.peers.Peers)
 	nextStage = Member
-	for err == nil && (st.leaderId == st.id || len(st.members) != len(st.peers)) {
-		stream, readed := backoff.BackoffOnFailure(channel)
-		if readed {
-			st.checkInvitation(stream, at)
+	backoff := utils.BackoffFrom(time.Now().Nanosecond())
+	for err == nil && st.leaderId == st.id && !st.peers.GroupIsComplete() && missing.PeersLeft() {
+		backoff.SetReadTimeout(st.dial)
+		logrus.Info("action: election | status: waiting for peer messages")
+		stream, addr, err := utils.SafeReadFrom(st.dial)
+		logrus.Infof("action: election | status: stream read | result: %s | stream: %s", err, stream)
+		if err == nil {
+			err = st.checkInvitation(stream, addr)
 		} else {
-			err = st.invitePeer(missing, at)
+			err = st.invitePeer(missing)
+			logrus.Infof("action: election | status: peer invitation | result: %s", err)
 		}
 	}
 
@@ -30,55 +36,124 @@ func (st *Status) runElection(at io.ReadWriter) (nextStage uint, err error) {
 	return
 }
 
-func (st *Status) checkInvitation(stream []byte, at io.ReadWriter) error {
-	if stream[0] == Invite {
+func (st *Status) checkInvitation(stream []byte, to *net.UDPAddr) error {
+	switch stream[0] {
+	case Invite:
 		inv, err := deserializeInv(stream[1:])
 		if err != nil {
 			return err
 		}
-		if inv.GroupSize > uint(len(st.members)) {
-			st.leaderId = inv.Id
-			_, err := writeToWithRetry(accept{
-				GroupSize: uint(len(st.members)),
-				Members:   st.members,
-			}, at, st.getPeer(inv.Id))
+		if inv.GroupSize > uint(len(st.peers.Members)) {
+			err = st.accept(inv.Id)
+			return err
+		} else {
+			err = st.reject(inv.Id)
 			return err
 		}
+	case Accept:
+		err := st.invitationResponse(stream, 0)
+		return err
+	case Heartbeat:
+		return writeTo(ok{}, st.dial, to.String())
 	}
 
 	return nil
 }
 
 func (st Status) getPeer(peerId uint) string {
-	return ""
+	return st.peers.GetAddr(peerId)
 }
 
-func (st *Status) invitationResponse(response []byte) error {
-	//Checks the response to an invitation message
+func (st *Status) addToGroup(peer uint, peerGroup []uint) {
+	st.peers.AddMembers(append(peerGroup, peer)...)
+}
+
+/*
+After having sent an invitation to some peer and the peer has answered me I need to:
+
+ 1. If the response was an accept, then add the peer and its group to my group
+
+ 2. If the response was a reject:
+    i- With LeaderID 0, then the peer could not give me a proper answer
+    ii- With LeaderID equal that of the the peer, then that peer is my new leader
+    iii- With LeaderID different from that of the peer, then I should invite its leader.
+
+ 3. Anything else, I should mark the peer as dead
+*/
+func (st *Status) invitationResponse(response []byte, lastPeer uint) error {
 	switch response[0] {
 	case Accept:
-		//Add the and its group to my members list
+		acc, err := deserializeAcc(response[1:])
+		if err != nil {
+			return err
+		}
+		st.addToGroup(lastPeer, acc.Members)
 	case Reject:
-		//Check the id, if 0, the same as the last peer or different
+		rej, err := deserializeRej(response[1:])
+		if err != nil {
+			return err
+		}
+		if rej.LeaderId != 0 {
+			if rej.LeaderId == lastPeer {
+				st.accept(lastPeer)
+			} else {
+				st.invite(rej.LeaderId)
+			}
+		}
 	default:
-		//mark the client as dead
+		st.markDeadPeer(lastPeer)
 	}
 	return nil
 }
 
-func (st *Status) invitePeer(choser *utils.Choser, at io.ReadWriter) error {
-	//Send invitation to peer, rejecting every other invitation with id = 0
-	//If peer rejects, and the id is diferent from 0, then send accept and change the leader id
-	peer := choser.Choose()
+func (st *Status) markDeadPeer(peer uint) {
+	st.peers.KillPeer(peer)
+}
+
+func (st *Status) invite(peer uint) error {
 	inv := invite{
 		Id:        st.id,
-		GroupSize: uint(len(st.members)),
+		GroupSize: uint(len(st.peers.Members)),
 	}
-	response, err := writeToWithRetry(inv, at, st.getPeer(peer))
+	logrus.Infof("Action: election | status: Inviting peer %d", peer)
+	response, err := writeToWithRetry(inv, st.dial, st.getPeer(peer))
 
 	if err == nil {
-		err = st.invitationResponse(response)
+		logrus.Infof("action: election | status: Response from peer %d", peer)
+		err = st.invitationResponse(response, peer)
 	}
 
 	return err
+}
+
+func (st *Status) reject(peer uint) error {
+	rej := reject{
+		LeaderId: st.leaderId,
+	}
+	return writeTo(rej, st.dial, st.getPeer(peer))
+}
+
+/*
+Accepts the invitation from a peer and deletes its own group
+*/
+func (st *Status) accept(peer uint) error {
+	st.leaderId = peer
+	acc := accept{
+		GroupSize: uint(len(st.peers.Members)),
+		Members:   st.peers.Members,
+	}
+	if err := writeTo(acc, st.dial, st.getPeer(peer)); err != nil {
+		return err
+	}
+	st.peers.Members = make([]uint, 0)
+	return nil
+}
+
+func (st *Status) invitePeer(choser *utils.Choser) error {
+	//Send invitation to peer, rejecting every other invitation with id = 0
+	//If peer rejects, and the id is diferent from 0, then send accept and change the leader id
+	peer := choser.Choose()
+	for ; st.peers.IsMember(peer); peer = choser.Choose() {
+	}
+	return st.invite(peer)
 }

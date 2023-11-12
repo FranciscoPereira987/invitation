@@ -3,18 +3,19 @@ package utils
 import (
 	"math"
 	"math/rand"
+	"net"
 	"time"
 )
 
 const (
-	InitialTimeOut = 1
-	TimeoutFactor = 2
+	InitialTimeOut      = 1
+	TimeoutFactor       = 2
 	NanoToSecondsFactor = 9
 )
 
 type BackoffTimer struct {
 	maxTimeout float64
-	source *rand.Rand 
+	source     *rand.Rand
 }
 
 func BackoffFrom(seed int) *BackoffTimer {
@@ -22,7 +23,7 @@ func BackoffFrom(seed int) *BackoffTimer {
 
 	return &BackoffTimer{
 		maxTimeout: InitialTimeOut,
-		source: rand.New(source),
+		source:     rand.New(source),
 	}
 }
 
@@ -30,27 +31,16 @@ func (bckoff *BackoffTimer) IncreaseTimeOut() {
 	bckoff.maxTimeout *= TimeoutFactor
 }
 
-func (bckoff *BackoffTimer) TimeOut() <- chan time.Time {
+func (bckoff *BackoffTimer) TimeOut() time.Time {
 	timeOut := bckoff.source.Int63n(int64(bckoff.maxTimeout * math.Pow10(NanoToSecondsFactor)))
-	return time.After(time.Duration(timeOut))
+	return time.Now().Add(time.Duration(timeOut))
 }
 
-func (bckoff *BackoffTimer) BackoffOnFailure(sckt *ChannelReader) (stream []byte, readed bool) {
-	stream, readed = TimerEvent(sckt, bckoff)
-	if !readed {
-		bckoff.IncreaseTimeOut()
-	}
-	return
+func (bckoff *BackoffTimer) SetReadTimeout(sckt *net.UDPConn) {
+	sckt.SetReadDeadline(bckoff.TimeOut())
 }
 
-/*
-	Returns true if the sckt was read before the timer timed out
-*/
-func TimerEvent(sckt *ChannelReader, bckoff *BackoffTimer) ([]byte, bool) {
-	select {
-	case stream := <- sckt.Channel:
-		return stream, true
-	case <- bckoff.TimeOut():
-		return nil, false
-	}
+func (bckoff *BackoffTimer) Wait() {
+	sleepTime := bckoff.source.Int63n(int64(bckoff.maxTimeout * math.Pow10(NanoToSecondsFactor)))
+	time.Sleep(time.Duration(sleepTime))
 }

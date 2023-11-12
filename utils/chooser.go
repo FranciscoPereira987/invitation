@@ -7,7 +7,7 @@ import (
 
 type Choser struct {
 	missing []uint
-	source *rand.Rand
+	source  *rand.Rand
 }
 
 func NewChooser(from []uint) *Choser {
@@ -19,6 +19,10 @@ func NewChooser(from []uint) *Choser {
 		missing,
 		source,
 	}
+}
+
+func (c *Choser) PeersLeft() bool {
+	return len(c.missing) > 0
 }
 
 func (c *Choser) Choose() uint {
