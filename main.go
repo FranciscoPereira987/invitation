@@ -116,5 +116,5 @@ func main4() {
 
 func main() {
 	logrus.Info("Starting")
-	main4()
+	main1()
 }

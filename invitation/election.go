@@ -100,14 +100,8 @@ func (st *Status) invitationResponse(response []byte, lastPeer uint) error {
 				st.invite(rej.LeaderId)
 			}
 		}
-	default:
-		st.markDeadPeer(lastPeer)
 	}
 	return nil
-}
-
-func (st *Status) markDeadPeer(peer uint) {
-	st.peers.KillPeer(peer)
 }
 
 func (st *Status) invite(peer uint) error {
