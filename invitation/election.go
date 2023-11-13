@@ -18,15 +18,15 @@ func (st *Status) runElection() (nextStage uint, err error) {
 	backoff := utils.BackoffFrom(time.Now().Nanosecond())
 	for err == nil && st.leaderId == st.id && !st.peers.GroupIsComplete() && missing.PeersLeft() {
 		backoff.SetReadTimeout(st.dial)
-		logrus.Info("action: election | status: waiting for peer messages")
+		//logrus.Info("action: election | status: waiting for peer messages")
 		stream, addr, err := utils.SafeReadFrom(st.dial)
-		logrus.Infof("action: election | status: stream read | result: %s | stream: %s", err, stream)
+		//logrus.Infof("action: election | status: stream read | result: %s | stream: %s", err, stream)
 		if err == nil {
 			err = st.checkInvitation(stream, addr)
 		} else {
 			err = st.invitePeer(missing)
-			logrus.Infof("action: election | status: peer invitation | result: %s", err)
 		}
+		logrus.Infof("action: election | status: peer invitation | result group: %s", st.peers.Members)
 	}
 
 	if st.leaderId == st.id && err == nil {
@@ -43,7 +43,8 @@ func (st *Status) checkInvitation(stream []byte, to *net.UDPAddr) error {
 		if err != nil {
 			return err
 		}
-		if inv.GroupSize > uint(len(st.peers.Members)) {
+		if inv.GroupSize >= uint(len(st.peers.Members)) {
+			logrus.Infof("Accepting invitation from: %d", inv.Id)
 			err = st.accept(inv.Id)
 			return err
 		} else {
@@ -87,7 +88,7 @@ func (st *Status) invitationResponse(response []byte, lastPeer uint) error {
 		if err != nil {
 			return err
 		}
-		st.addToGroup(lastPeer, acc.Members)
+		st.addToGroup(acc.From, acc.Members)
 	case Reject:
 		rej, err := deserializeRej(response[1:])
 		if err != nil {
@@ -133,6 +134,7 @@ Accepts the invitation from a peer and deletes its own group
 func (st *Status) accept(peer uint) error {
 	st.leaderId = peer
 	acc := accept{
+		From:      st.id,
 		GroupSize: uint(len(st.peers.Members)),
 		Members:   st.peers.Members,
 	}

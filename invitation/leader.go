@@ -19,7 +19,7 @@ func (st *Status) ActAsLeader() (uint, error) {
 		logrus.Infof("action: acting leader | status: recieved invitation")
 		return Electing, st.checkInvitation(msg, addr)
 	case Heartbeat:
-		logrus.Infof("action: acting leader | status: recieved heartbeat")
+		//logrus.Infof("action: acting leader | status: recieved heartbeat")
 		return Coordinator, writeTo(ok{}, st.dial, addr.String())
 	}
 	return Coordinator, err

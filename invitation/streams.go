@@ -54,6 +54,7 @@ func deserializeRej(stream []byte) (rej reject, err error) {
 
 func (acc accept) serialize() (stream []byte) {
 	stream = []byte{Accept}
+	stream = binary.LittleEndian.AppendUint32(stream, uint32(acc.From))
 	stream = binary.LittleEndian.AppendUint32(stream, uint32(acc.GroupSize))
 	for _, member := range acc.Members {
 		stream = binary.LittleEndian.AppendUint32(stream, uint32(member))
@@ -62,18 +63,22 @@ func (acc accept) serialize() (stream []byte) {
 }
 
 func deserializeAcc(stream []byte) (acc accept, err error) {
-	if len(stream) < 4 {
+	if len(stream) < 8 {
 		err = InvalidStreamErr
 	}
 
 	if err == nil {
-		acc.GroupSize = uint(binary.BigEndian.Uint32(stream[:4]))
+		acc.From = uint(binary.LittleEndian.Uint32(stream[:4]))
+	}
+	stream = stream[4:]
+	if err == nil {
+		acc.GroupSize = uint(binary.LittleEndian.Uint32(stream[:4]))
 	}
 
 	if err == nil {
 		stream = stream[4:]
 		for len(stream) > 0 {
-			acc.Members = append(acc.Members, uint(binary.BigEndian.Uint32(stream[:4])))
+			acc.Members = append(acc.Members, uint(binary.LittleEndian.Uint32(stream[:4])))
 			stream = stream[4:]
 		}
 	}
@@ -96,7 +101,7 @@ func deserializeChange(stream []byte) (ch change, err error) {
 	}
 
 	if err == nil {
-		ch.NewLeaderId = uint(binary.BigEndian.Uint32(stream))
+		ch.NewLeaderId = uint(binary.LittleEndian.Uint32(stream))
 	}
 
 	return

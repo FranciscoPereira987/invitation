@@ -4,8 +4,6 @@ import (
 	"invitation/utils"
 	"net"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -33,6 +31,7 @@ type reject struct {
 }
 
 type accept struct {
+	From      uint
 	GroupSize uint
 	Members   []uint
 }
@@ -73,11 +72,11 @@ func (st *Status) Run() (err error) {
 			state, err = st.runElection()
 		case Coordinator:
 			//Leader
-			logrus.Infof("Action: peer %d acting as leader", st.id)
+			//logrus.Infof("Action: peer %d acting as leader", st.id)
 			state, err = st.ActAsLeader()
 		case Member:
 			//Member of a group
-			logrus.Infof("Action: peer %d acting as member | leader: peer %d ", st.id, st.leaderId)
+			//logrus.Infof("Action: peer %d acting as member | leader: peer %d ", st.id, st.leaderId)
 			state, err = st.ActAsMember()
 		}
 	}

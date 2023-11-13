@@ -20,6 +20,7 @@ func (st *Status) ActAsMember() (uint, error) {
 			}
 			if inv.Id == st.leaderId {
 				msg = accept{
+					st.id,
 					0,
 					st.peers.Members,
 				}
