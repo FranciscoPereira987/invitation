@@ -2,7 +2,13 @@ package utils
 
 import (
 	"encoding/binary"
+	"errors"
 	"net"
+)
+
+var (
+	ErrTooShort = errors.New("stream too short")
+	ErrInvalidString = errors.New("invalid string")
 )
 
 func getLength(stream []byte) int {
@@ -15,6 +21,23 @@ func getLength(stream []byte) int {
 func addLength(stream []byte) []byte {
 	length := binary.LittleEndian.AppendUint32(nil, uint32(len(stream)))
 	return append(length, stream...)
+}
+
+func EncodeString(str string) []byte {
+	stream := []byte(str)
+	length := binary.LittleEndian.AppendUint32(nil, uint32(len(stream)))
+	return append(length, stream...)
+}
+
+func DecodeString(stream []byte) (string, error) {
+	if len(stream) < 4 {
+		return "", ErrTooShort
+	}
+	length := binary.LittleEndian.Uint32(stream[:4])
+	if len(stream[4:]) != int(length) {
+		return "", ErrInvalidString
+	}
+	return string(stream[4:]), nil
 }
 
 func SafeWriteTo(stream []byte, sckt *net.UDPConn, to *net.UDPAddr) error {
