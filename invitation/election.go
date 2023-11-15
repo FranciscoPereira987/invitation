@@ -19,10 +19,11 @@ func (st *Status) runElection() (nextStage uint, err error) {
 	for err == nil && st.leaderId == st.id && !st.peers.GroupIsComplete() && missing.PeersLeft() {
 		backoff.SetReadTimeout(st.dial)
 		//logrus.Info("action: election | status: waiting for peer messages")
-		stream, addr, err := utils.SafeReadFrom(st.dial)
+		stream, addr, err_read := utils.SafeReadFrom(st.dial)
+		err = err_read
 		//logrus.Infof("action: election | status: stream read | result: %s | stream: %s", err, stream)
 		if err == nil {
-			err = st.checkInvitation(stream, addr)
+			err = st.checkInvitation(stream, addr, missing)
 		} else {
 			err = st.invitePeer(missing)
 		}
@@ -36,7 +37,7 @@ func (st *Status) runElection() (nextStage uint, err error) {
 	return
 }
 
-func (st *Status) checkInvitation(stream []byte, to *net.UDPAddr) error {
+func (st *Status) checkInvitation(stream []byte, to *net.UDPAddr, choser *utils.Choser) error {
 	switch stream[0] {
 	case Invite:
 		inv, err := deserializeInv(stream[1:])
@@ -52,7 +53,7 @@ func (st *Status) checkInvitation(stream []byte, to *net.UDPAddr) error {
 			return err
 		}
 	case Accept:
-		err := st.invitationResponse(stream, 0)
+		err := st.invitationResponse(stream, 0, choser)
 		return err
 	case Heartbeat:
 		return writeTo(ok{}, st.dial, to.String())
@@ -81,7 +82,7 @@ After having sent an invitation to some peer and the peer has answered me I need
 
  3. Anything else, I should mark the peer as dead
 */
-func (st *Status) invitationResponse(response []byte, lastPeer uint) error {
+func (st *Status) invitationResponse(response []byte, lastPeer uint, choser *utils.Choser) error {
 	switch response[0] {
 	case Accept:
 		acc, err := deserializeAcc(response[1:])
@@ -96,16 +97,20 @@ func (st *Status) invitationResponse(response []byte, lastPeer uint) error {
 		}
 		if rej.LeaderId != 0 {
 			if rej.LeaderId == lastPeer {
-				st.accept(lastPeer)
+				return st.accept(lastPeer)
 			} else {
-				st.invite(rej.LeaderId)
+				return st.invite(rej.LeaderId, choser)
 			}
+		} else {
+			choser.Retry(lastPeer)
 		}
+	default:
+		choser.Retry(lastPeer)
 	}
 	return nil
 }
 
-func (st *Status) invite(peer uint) error {
+func (st *Status) invite(peer uint, choser *utils.Choser) error {
 	inv := invite{
 		Id:        st.id,
 		GroupSize: uint(len(st.peers.Members)),
@@ -115,7 +120,10 @@ func (st *Status) invite(peer uint) error {
 
 	if err == nil {
 		logrus.Infof("action: election | status: Response from peer %d", peer)
-		err = st.invitationResponse(response, peer)
+		err = st.invitationResponse(response, peer, choser)
+	} else {
+		err = nil
+		choser.Retry(peer)
 	}
 
 	return err
@@ -167,7 +175,7 @@ func (st *Status) invitePeer(choser *utils.Choser) error {
 	//Send invitation to peer, rejecting every other invitation with id = 0
 	//If peer rejects, and the id is diferent from 0, then send accept and change the leader id
 	peer := choser.Choose()
-	for ; st.peers.IsMember(peer); peer = choser.Choose() {
+	for ; st.peers.IsMember(peer) && choser.PeersLeft(); peer = choser.Choose() {
 	}
-	return st.invite(peer)
+	return st.invite(peer, choser)
 }
