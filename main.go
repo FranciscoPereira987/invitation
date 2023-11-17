@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"invitation/beater"
 	"invitation/invitation"
 	"invitation/utils"
 
@@ -51,7 +52,7 @@ func parseConfig(v *viper.Viper) (config *invitation.Config, err error) {
 	return
 }
 
-func main() {
+func invMain() {
 	v, err := utils.InitConfig("INV", "/config")
 	if err != nil {
 		logrus.Errorf("Error parsing config file: %s", err)
@@ -66,4 +67,12 @@ func main() {
 	if err := invitation.Run(); err != nil {
 		logrus.Fatalf("Invitation process ended with error: %s", err)
 	}
+}
+
+func main() {
+	client, _ := beater.NewBeaterClient("beater1", "127.0.0.1:9999")
+	server := beater.NewBeaterServer([]string{"beater1"}, []string{"127.0.0.1"}, "10000")
+
+	go client.Run()
+	server.Run("9999")
 }

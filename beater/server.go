@@ -14,11 +14,10 @@ import (
 
 const (
 	Heartbeat = iota + 1
-	Ok 
+	Ok
 )
 
-
-type heartbeat struct {}
+type heartbeat struct{}
 
 func (hb heartbeat) serialize() []byte {
 	return []byte{Heartbeat}
@@ -26,6 +25,11 @@ func (hb heartbeat) serialize() []byte {
 
 type ok struct {
 	whom string
+}
+
+type client struct {
+	Name string
+	Addr string
 }
 
 func (o ok) serialize() []byte {
@@ -45,11 +49,13 @@ func (o *ok) deserialize(stream []byte) error {
 type url = any
 
 /*
-	The Beater Server makes sure that all uniquely named clients
-	are alive.
+The Beater Server makes sure that all uniquely named clients
+are alive.
 */
 type BeaterServer struct {
 	clients map[string]*timer
+
+	clientInfo []client
 
 	sckt *net.UDPConn
 
@@ -57,8 +63,8 @@ type BeaterServer struct {
 }
 
 /*
-	Timer runs a routine to keep clients
-	in check, ensuring that they are alive
+Timer runs a routine to keep clients
+in check, ensuring that they are alive
 */
 type timer struct {
 	//Allows for the timer to reset
@@ -70,7 +76,7 @@ type timer struct {
 	clientAddr *net.UDPAddr
 
 	/*
-		Service name that's going to be used to 
+		Service name that's going to be used to
 		recreate the client
 	*/
 	name string
@@ -81,7 +87,7 @@ type timer struct {
 
 func NewTimer(at string, name string) (*timer, error) {
 	addr, err := net.ResolveUDPAddr("udp", at)
-	var t *timer
+	t := new(timer)
 	if err == nil {
 		t.InboundChan = make(chan bool, 1)
 		t.OutboundChan = make(chan *net.UDPAddr, 1)
@@ -99,54 +105,61 @@ loop:
 		timeout := time.After(t.maxTime)
 		t.OutboundChan <- t.clientAddr
 		select {
-		case <- timeout:
+		case <-timeout:
 			logrus.Info("Service is dead")
-		case result := <- t.InboundChan:
+		case result := <-t.InboundChan:
 			logrus.Info("Client answered")
-			if !result{
+			if !result {
 				logrus.Infof("action: Client %s timer | status: ending", t.clientAddr.String())
 				break loop
 			}
-			<- time.After(t.maxTime / 2)
+			<-time.After(t.maxTime / 2)
 		}
 	}
 	group.Done()
-	
+
 }
 
-func NewBeaterServer(clients []string, at string) *BeaterServer {
+func NewBeaterServer(clients []string, clientAddrs []string, at string) *BeaterServer {
 	client_map := make(map[string]*timer)
-	for _, client := range clients {
-		client_map[client] = &timer{}
+
+	clientInfo := make([]client, 0)
+	for index, clientName := range clients {
+		clientInfo = append(clientInfo, client{
+			clientName,
+			clientAddrs[index],
+		})
 	}
 
 	addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:"+at)
 	if err != nil {
 		return nil
-	} 
+	}
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		return nil
 	}
 	return &BeaterServer{
 		client_map,
+		clientInfo,
 		conn,
 		new(sync.WaitGroup),
 	}
 }
 
 /*
-	Initiates timers and merge channels
+Initiates timers and merge channels
 */
 func (b *BeaterServer) initiateTimers(port string) chan *net.UDPAddr {
 	mergedChans := make([](<-chan *net.UDPAddr), 0)
-	for key, _ := range b.clients {
-		timer, err := NewTimer(key + ":" + port, key)
+	for _, value := range b.clientInfo {
+
+		timer, err := NewTimer(value.Addr+":"+port, value.Name)
 		if err == nil {
-			b.clients[key] = timer
+			b.clients[value.Name] = timer
 			mergedChans = append(mergedChans, timer.OutboundChan)
 			go timer.executeTimer(b.wg)
-		}else {
+		} else {
 			logrus.Fatalf("action: timer-initialization | status: failed | reason: %s", err)
 		}
 	}
@@ -155,13 +168,13 @@ func (b *BeaterServer) initiateTimers(port string) chan *net.UDPAddr {
 }
 
 /*
-	Initiates socket reading routine
+Initiates socket reading routine
 */
 func (b *BeaterServer) initiateReader() chan []byte {
 	readerChan := make(chan []byte, 1)
-	go func () {
+	go func() {
 		var err error
-		for err == nil{
+		for err == nil {
 			beat, _, err_read := utils.SafeReadFrom(b.sckt)
 			err = err_read
 			if err == nil {
@@ -178,7 +191,7 @@ func (b *BeaterServer) parseBeat(beat []byte) {
 		return
 	}
 	ok := &ok{}
-	err := ok.deserialize(beat)
+	err := ok.deserialize(beat[1:])
 	if err != nil {
 		logrus.Errorf("error while deserializing beat response: %s", err)
 		return
@@ -189,30 +202,28 @@ func (b *BeaterServer) parseBeat(beat []byte) {
 }
 
 /*
-	Runs a routine that is in charge of writing to the socket
-	heartbeats
+Runs a routine that is in charge of writing to the socket
+heartbeats
 */
 func (b *BeaterServer) writeRoutine(channel <-chan *net.UDPAddr) {
-	for addr := range channel{
+	for addr := range channel {
 		err := utils.SafeWriteTo(heartbeat{}.serialize(), b.sckt, addr)
 		if err != nil {
 			logrus.Errorf("action: heartbeat to services | status: %s", err)
 		}
 	}
 	logrus.Info("action: write routine | status: finishing")
-} 
-
-
+}
 
 /*
-	1. server starts all timers
-	2. server loop:
-		- Select -> write to client channel
-					-> Send to write rutine
-				 -> listen from socket channel
-				 	-> Update client mappings
-				 -> listen for shutdown
-				 	-> shutdown if necessary
+1. server starts all timers
+2. server loop:
+  - Select -> write to client channel
+    -> Send to write rutine
+    -> listen from socket channel
+    -> Update client mappings
+    -> listen for shutdown
+    -> shutdown if necessary
 */
 func (b *BeaterServer) Run(port string) (err error) {
 	timersChan := b.initiateTimers(port)
@@ -220,16 +231,16 @@ func (b *BeaterServer) Run(port string) (err error) {
 	readerChan := b.initiateReader()
 	defer close(readerChan)
 	go b.writeRoutine(timersChan)
-	
+
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGTERM)
 
 loop:
 	for {
 		select {
-		case beat := <- readerChan:
+		case beat := <-readerChan:
 			b.parseBeat(beat)
-		case <- shutdown:
+		case <-shutdown:
 			break loop
 		}
 	}
@@ -240,5 +251,5 @@ loop:
 
 	b.wg.Wait()
 
-	return 
+	return
 }
