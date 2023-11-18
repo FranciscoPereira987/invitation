@@ -3,6 +3,7 @@ package beater
 import (
 	"errors"
 	"invitation/pkg/utils"
+	"os"
 
 	"net"
 
@@ -53,7 +54,14 @@ func (st *BeaterClient) run() error {
 
 func (st *BeaterClient) Run() {
 	go func() {
-		st.resultChan <- st.run()
+		termination := make(chan os.Signal, 1)
+		defer close(termination)
+		select {
+		case st.resultChan <- st.run():
+		case <-termination:
+			st.resultChan <- nil
+			st.Stop()
+		}
 	}()
 }
 

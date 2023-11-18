@@ -62,6 +62,9 @@ func (st *Status) checkInvitation(stream []byte, to *net.UDPAddr, choser *utils.
 	case Accept:
 		err := st.invitationResponse(stream, 0, choser)
 		return err
+	case Reject:
+		err := st.invitationResponse(stream, 0, choser)
+		return err
 	case Heartbeat:
 		return writeTo(ok{}, st.dial, to.String())
 	}

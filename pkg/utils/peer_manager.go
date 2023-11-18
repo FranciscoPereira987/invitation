@@ -16,12 +16,13 @@ func NewPeers(peers []uint, mappings map[uint]string) *Peers {
 	}
 }
 
-func (p *Peers) Remove(peer uint) {
-	for index, peerId := range p.Members {
-		if peer == peerId {
-			p.Members = append(p.Members[:index], p.Members[index+1:]...)
+func (p Peers) GetMissing() (missing []uint) {
+	for _, peer := range p.Peers {
+		if !p.IsInGroup(peer) {
+			missing = append(missing, peer)
 		}
 	}
+	return
 }
 
 func (p *Peers) GetAddr(peer uint) string {

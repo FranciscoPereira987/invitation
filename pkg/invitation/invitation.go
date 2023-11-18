@@ -5,6 +5,9 @@ import (
 	"invitation/pkg/beater"
 	"invitation/pkg/utils"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -81,6 +84,25 @@ func stopBeater(beat beater.Runable) (err error) {
 }
 
 func (st *Status) Run() (err error) {
+
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, syscall.SIGTERM)
+	resultChan := make(chan error, 1)
+	go func() {
+		defer close(resultChan)
+		resultChan <- st.run()
+	}()
+	defer close(stopChan)
+	select {
+	case err = <-resultChan:
+		return
+	case <-stopChan:
+		stopBeater(st.control)
+		return
+	}
+}
+
+func (st *Status) run() (err error) {
 	state := Electing
 	lastState := Electing
 	for err == nil {
