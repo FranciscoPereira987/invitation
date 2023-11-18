@@ -10,7 +10,7 @@ services:
     environment:
       - INV_NAME=1
     volumes:
-      - ./config.yaml:/config.yaml
+      - ./cmd/heartbeater/config.yaml:/config.yaml
 
 
   peer2:
@@ -22,7 +22,7 @@ services:
     environment:
       - INV_NAME=2
     volumes:
-      - ./config.yaml:/config.yaml
+      - ./cmd/heartbeater/config.yaml:/config.yaml
 
 
   peer3:
@@ -34,7 +34,7 @@ services:
     environment:
       - INV_NAME=3
     volumes:
-      - ./config.yaml:/config.yaml
+      - ./cmd/heartbeater/config.yaml:/config.yaml
 
 
   peer4:
@@ -46,7 +46,7 @@ services:
     environment:
       - INV_NAME=4
     volumes:
-      - ./config.yaml:/config.yaml
+      - ./cmd/heartbeater/config.yaml:/config.yaml
 
 
   peer5:
@@ -58,7 +58,7 @@ services:
     environment:
       - INV_NAME=5
     volumes:
-      - ./config.yaml:/config.yaml
+      - ./cmd/heartbeater/config.yaml:/config.yaml
 
 
   peer6:
@@ -70,7 +70,7 @@ services:
     environment:
       - INV_NAME=6
     volumes:
-      - ./config.yaml:/config.yaml
+      - ./cmd/heartbeater/config.yaml:/config.yaml
 
 
   peer7:
@@ -82,7 +82,7 @@ services:
     environment:
       - INV_NAME=7
     volumes:
-      - ./config.yaml:/config.yaml
+      - ./cmd/heartbeater/config.yaml:/config.yaml
 
 
   peer8:
@@ -94,7 +94,7 @@ services:
     environment:
       - INV_NAME=8
     volumes:
-      - ./config.yaml:/config.yaml
+      - ./cmd/heartbeater/config.yaml:/config.yaml
 
 
   peer9:
@@ -106,7 +106,7 @@ services:
     environment:
       - INV_NAME=9
     volumes:
-      - ./config.yaml:/config.yaml
+      - ./cmd/heartbeater/config.yaml:/config.yaml
 
 
 networks:

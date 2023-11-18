@@ -7,6 +7,9 @@ type Config struct {
 	Id      uint
 	Mapping map[uint]string
 	Conn    *net.UDPConn
+	Heartbeat string
+	Name string
+	Names []string
 }
 
 /*

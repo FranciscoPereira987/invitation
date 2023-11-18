@@ -1,11 +1,15 @@
 package invitation
 
 import (
-	"invitation/utils"
+	"invitation/pkg/utils"
 	"net"
 	"time"
 
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	MaxNoInvites = 3
 )
 
 /*
@@ -16,23 +20,26 @@ func (st *Status) runElection() (nextStage uint, err error) {
 	missing := utils.NewChooser(st.peers.Peers)
 	nextStage = Member
 	backoff := utils.BackoffFrom(time.Now().Nanosecond())
+	withoutInvites := 0
 	for err == nil && st.leaderId == st.id && !st.peers.GroupIsComplete() && missing.PeersLeft() {
 		backoff.SetReadTimeout(st.dial)
 		//logrus.Info("action: election | status: waiting for peer messages")
 		stream, addr, err_read := utils.SafeReadFrom(st.dial)
 		err = err_read
 		//logrus.Infof("action: election | status: stream read | result: %s | stream: %s", err, stream)
-		if err == nil {
+		if err == nil && withoutInvites < MaxNoInvites{
 			err = st.checkInvitation(stream, addr, missing)
+			withoutInvites++
 		} else {
 			err = st.invitePeer(missing)
+			withoutInvites = 0
 		}
-		logrus.Infof("action: election | status: peer invitation | result group: %s", st.peers.Members)
 	}
-
+	
 	if st.leaderId == st.id && err == nil {
 		nextStage = Coordinator
 	}
+	logrus.Infof("action: election | status: peer invitation | result group: %s", st.peers.Members)
 
 	return
 }

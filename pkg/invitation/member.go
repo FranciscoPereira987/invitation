@@ -1,7 +1,7 @@
 package invitation
 
 import (
-	"invitation/utils"
+	"invitation/pkg/utils"
 	"time"
 
 	"github.com/sirupsen/logrus"

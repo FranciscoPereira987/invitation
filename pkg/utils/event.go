@@ -32,8 +32,9 @@ func (bckoff *BackoffTimer) IncreaseTimeOut() {
 }
 
 func (bckoff *BackoffTimer) TimeOut() time.Time {
-	timeOut := bckoff.source.Int63n(int64(bckoff.maxTimeout * math.Pow10(NanoToSecondsFactor)))
-	return time.Now().Add(time.Duration(timeOut))
+	nano := bckoff.source.Intn(int(bckoff.maxTimeout)) + 1 
+	timeOut := time.Second * time.Duration(nano)
+	return time.Now().Add(timeOut)
 }
 
 func (bckoff *BackoffTimer) SetReadTimeout(sckt *net.UDPConn) {

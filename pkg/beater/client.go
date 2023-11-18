@@ -1,7 +1,9 @@
 package beater
 
 import (
-	"invitation/utils"
+	"errors"
+	"invitation/pkg/utils"
+
 	"net"
 
 	"github.com/sirupsen/logrus"
@@ -12,6 +14,8 @@ Each client has a name which serves as an ID of the client
 */
 type BeaterClient struct {
 	conn *net.UDPConn
+	
+	resultChan chan error
 
 	name string
 }
@@ -27,15 +31,15 @@ func NewBeaterClient(name string, addr string) (*BeaterClient, error) {
 
 	return &BeaterClient{
 		conn,
+		make(chan error, 1),
 		name,
 	}, err
 }
 
-func (st *BeaterClient) Run() error {
+func (st *BeaterClient) run() error {
 	var err error
 	for err == nil {
 		recovered, server, err_read := utils.SafeReadFrom(st.conn)
-		logrus.Info("action: client | status: recieved heartbeat from server")
 		err = err_read
 		if err == nil {
 			if recovered[0] == Heartbeat {
@@ -46,3 +50,17 @@ func (st *BeaterClient) Run() error {
 	}
 	return err
 }
+
+func (st *BeaterClient) Run() {
+	go func() {
+		st.resultChan <- st.run()
+	}()
+}
+
+func (st *BeaterClient) Stop() error {
+	defer close(st.resultChan)
+	err := st.conn.Close()
+	err = errors.Join(err, <- st.resultChan)
+	return err
+}
+

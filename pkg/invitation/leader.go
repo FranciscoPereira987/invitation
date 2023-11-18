@@ -1,7 +1,7 @@
 package invitation
 
 import (
-	"invitation/utils"
+	"invitation/pkg/utils"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -17,7 +17,8 @@ func (st *Status) ActAsLeader() (uint, error) {
 	switch msg[0] {
 	case Invite:
 		logrus.Infof("action: acting leader | status: recieved invitation")
-		return Electing, st.checkInvitation(msg, addr, nil)
+		st.checkInvitation(msg, addr, nil)
+		return st.runElection()
 	case Heartbeat:
 		//logrus.Infof("action: acting leader | status: recieved heartbeat")
 		return Coordinator, writeTo(ok{}, st.dial, addr.String())

@@ -1,7 +1,8 @@
 package beater
 
 import (
-	"invitation/utils"
+	"errors"
+	"invitation/pkg/utils"
 	"net"
 	"os"
 	"os/signal"
@@ -48,6 +49,11 @@ func (o *ok) deserialize(stream []byte) error {
 
 type url = any
 
+type Runable interface {
+	Stop() error
+	Run()
+}	
+
 /*
 The Beater Server makes sure that all uniquely named clients
 are alive.
@@ -60,6 +66,12 @@ type BeaterServer struct {
 	sckt *net.UDPConn
 
 	wg *sync.WaitGroup
+
+	resultsChan chan error
+
+	port string
+
+	shutdown chan os.Signal
 }
 
 /*
@@ -73,7 +85,7 @@ type timer struct {
 	//Outputs a message to be delivered to the client
 	OutboundChan chan *net.UDPAddr
 
-	clientAddr *net.UDPAddr
+	clientAddr string
 
 	/*
 		Service name that's going to be used to
@@ -85,32 +97,43 @@ type timer struct {
 	maxTime time.Duration
 }
 
-func NewTimer(at string, name string) (*timer, error) {
-	addr, err := net.ResolveUDPAddr("udp", at)
+func NewTimer(at string, name string) *timer {
 	t := new(timer)
-	if err == nil {
-		t.InboundChan = make(chan bool, 1)
-		t.OutboundChan = make(chan *net.UDPAddr, 1)
-		t.clientAddr = addr
-		t.name = name
-		t.maxTime = time.Second * 2
-	}
-	return t, err
+	
+	t.InboundChan = make(chan bool, 1)
+	t.OutboundChan = make(chan *net.UDPAddr, 1)
+	t.clientAddr = at
+	t.name = name
+	t.maxTime = time.Second * 2
+	
+	return t
 }
 
 func (t *timer) executeTimer(group *sync.WaitGroup) {
 	defer close(t.OutboundChan)
+	clientAddr, err := net.ResolveUDPAddr("udp", t.clientAddr)
+	for err != nil {
+		logrus.Errorf("action: resolving client address | result: failed | action: re-instantiating client")
+		<- time.After(t.maxTime * 5)
+		clientAddr, err = net.ResolveUDPAddr("udp", t.clientAddr)
+		select {
+		case <- t.InboundChan:
+			group.Done()
+			return
+		default:
+		}
+	}
 loop:
 	for {
 		timeout := time.After(t.maxTime)
-		t.OutboundChan <- t.clientAddr
+		t.OutboundChan <- clientAddr
 		select {
 		case <-timeout:
 			logrus.Info("Service is dead")
 		case result := <-t.InboundChan:
 			logrus.Info("Client answered")
 			if !result {
-				logrus.Infof("action: Client %s timer | status: ending", t.clientAddr.String())
+				logrus.Infof("action: Client %s timer | status: ending", t.clientAddr)
 				break loop
 			}
 			<-time.After(t.maxTime / 2)
@@ -144,6 +167,9 @@ func NewBeaterServer(clients []string, clientAddrs []string, at string) *BeaterS
 		clientInfo,
 		conn,
 		new(sync.WaitGroup),
+		make(chan error, 1),
+		at,
+		nil,
 	}
 }
 
@@ -154,14 +180,12 @@ func (b *BeaterServer) initiateTimers(port string) chan *net.UDPAddr {
 	mergedChans := make([](<-chan *net.UDPAddr), 0)
 	for _, value := range b.clientInfo {
 
-		timer, err := NewTimer(value.Addr+":"+port, value.Name)
-		if err == nil {
-			b.clients[value.Name] = timer
-			mergedChans = append(mergedChans, timer.OutboundChan)
-			go timer.executeTimer(b.wg)
-		} else {
-			logrus.Fatalf("action: timer-initialization | status: failed | reason: %s", err)
-		}
+		timer := NewTimer(value.Addr+":"+port, value.Name)
+		
+		b.clients[value.Name] = timer
+		mergedChans = append(mergedChans, timer.OutboundChan)
+		go timer.executeTimer(b.wg)
+		
 	}
 	b.wg.Add(len(mergedChans))
 	return utils.Merge(mergedChans...)
@@ -215,17 +239,7 @@ func (b *BeaterServer) writeRoutine(channel <-chan *net.UDPAddr) {
 	logrus.Info("action: write routine | status: finishing")
 }
 
-/*
-1. server starts all timers
-2. server loop:
-  - Select -> write to client channel
-    -> Send to write rutine
-    -> listen from socket channel
-    -> Update client mappings
-    -> listen for shutdown
-    -> shutdown if necessary
-*/
-func (b *BeaterServer) Run(port string) (err error) {
+func (b *BeaterServer) run(port string) (err error) {
 	timersChan := b.initiateTimers(port)
 	defer close(timersChan)
 	readerChan := b.initiateReader()
@@ -233,6 +247,8 @@ func (b *BeaterServer) Run(port string) (err error) {
 	go b.writeRoutine(timersChan)
 
 	shutdown := make(chan os.Signal, 1)
+	b.shutdown = shutdown
+	defer close(shutdown)
 	signal.Notify(shutdown, syscall.SIGTERM)
 
 loop:
@@ -252,4 +268,28 @@ loop:
 	b.wg.Wait()
 
 	return
+}
+
+/*
+1. server starts all timers
+2. server loop:
+  - Select -> write to client channel
+    -> Send to write rutine
+    -> listen from socket channel
+    -> Update client mappings
+    -> listen for shutdown
+    -> shutdown if necessary
+*/
+func (b *BeaterServer) Run() {
+	go func() {
+		b.resultsChan <- b.run(b.port)
+	}()
+}
+
+func (b *BeaterServer) Stop() error {
+	err := b.sckt.Close()
+	b.shutdown <- syscall.SIGTERM
+	err = errors.Join(err, <- b.resultsChan)
+	
+	return err
 }

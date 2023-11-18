@@ -2,9 +2,8 @@ package main
 
 import (
 	"errors"
-	"invitation/beater"
-	"invitation/invitation"
-	"invitation/utils"
+	"invitation/pkg/invitation"
+	"invitation/pkg/utils"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -16,6 +15,7 @@ const (
 	Peers       = "peers"
 	PeerName    = "peer_name"
 	PeerNetName = "net_name"
+	HeartBeat = "heartbeat_port"
 )
 
 var (
@@ -45,9 +45,13 @@ func parseConfig(v *viper.Viper) (config *invitation.Config, err error) {
 			if uint(id) != uint(peerName) {
 				config.Mapping[uint(peerName)] = peerNetName + ":" + port
 				config.Peers = append(config.Peers, uint(peerName))
+				config.Names = append(config.Names, peerNetName)
+			}else {
+				config.Name = peerNetName
 			}
 		}
 	}
+	config.Heartbeat = v.GetString(HeartBeat)
 
 	return
 }
@@ -70,9 +74,8 @@ func invMain() {
 }
 
 func main() {
-	client, _ := beater.NewBeaterClient("beater1", "127.0.0.1:9999")
-	server := beater.NewBeaterServer([]string{"beater1"}, []string{"127.0.0.1"}, "10000")
-
-	go client.Run()
-	server.Run("9999")
+	invMain()
 }
+
+
+
