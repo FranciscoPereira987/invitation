@@ -52,7 +52,7 @@ type url = any
 type Runable interface {
 	Stop() error
 	Run()
-}	
+}
 
 /*
 The Beater Server makes sure that all uniquely named clients
@@ -99,13 +99,13 @@ type timer struct {
 
 func NewTimer(at string, name string) *timer {
 	t := new(timer)
-	
+
 	t.InboundChan = make(chan bool, 1)
 	t.OutboundChan = make(chan *net.UDPAddr, 1)
 	t.clientAddr = at
 	t.name = name
 	t.maxTime = time.Second * 2
-	
+
 	return t
 }
 
@@ -114,10 +114,10 @@ func (t *timer) executeTimer(group *sync.WaitGroup) {
 	clientAddr, err := net.ResolveUDPAddr("udp", t.clientAddr)
 	for err != nil {
 		logrus.Errorf("action: resolving client address | result: failed | action: re-instantiating client")
-		<- time.After(t.maxTime * 5)
+		<-time.After(t.maxTime * 5)
 		clientAddr, err = net.ResolveUDPAddr("udp", t.clientAddr)
 		select {
-		case <- t.InboundChan:
+		case <-t.InboundChan:
 			group.Done()
 			return
 		default:
@@ -181,11 +181,11 @@ func (b *BeaterServer) initiateTimers(port string) chan *net.UDPAddr {
 	for _, value := range b.clientInfo {
 
 		timer := NewTimer(value.Addr+":"+port, value.Name)
-		
+
 		b.clients[value.Name] = timer
 		mergedChans = append(mergedChans, timer.OutboundChan)
 		go timer.executeTimer(b.wg)
-		
+
 	}
 	b.wg.Add(len(mergedChans))
 	return utils.Merge(mergedChans...)
@@ -289,7 +289,7 @@ func (b *BeaterServer) Run() {
 func (b *BeaterServer) Stop() error {
 	err := b.sckt.Close()
 	b.shutdown <- syscall.SIGTERM
-	err = errors.Join(err, <- b.resultsChan)
-	
+	err = errors.Join(err, <-b.resultsChan)
+
 	return err
 }

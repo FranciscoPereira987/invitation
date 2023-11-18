@@ -15,7 +15,7 @@ const (
 	Peers       = "peers"
 	PeerName    = "peer_name"
 	PeerNetName = "net_name"
-	HeartBeat = "heartbeat_port"
+	HeartBeat   = "heartbeat_port"
 )
 
 var (
@@ -46,7 +46,7 @@ func parseConfig(v *viper.Viper) (config *invitation.Config, err error) {
 				config.Mapping[uint(peerName)] = peerNetName + ":" + port
 				config.Peers = append(config.Peers, uint(peerName))
 				config.Names = append(config.Names, peerNetName)
-			}else {
+			} else {
 				config.Name = peerNetName
 			}
 		}
@@ -76,6 +76,3 @@ func invMain() {
 func main() {
 	invMain()
 }
-
-
-

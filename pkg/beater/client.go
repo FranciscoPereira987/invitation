@@ -14,7 +14,7 @@ Each client has a name which serves as an ID of the client
 */
 type BeaterClient struct {
 	conn *net.UDPConn
-	
+
 	resultChan chan error
 
 	name string
@@ -60,7 +60,6 @@ func (st *BeaterClient) Run() {
 func (st *BeaterClient) Stop() error {
 	defer close(st.resultChan)
 	err := st.conn.Close()
-	err = errors.Join(err, <- st.resultChan)
+	err = errors.Join(err, <-st.resultChan)
 	return err
 }
-

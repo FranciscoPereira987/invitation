@@ -27,7 +27,7 @@ func (st *Status) runElection() (nextStage uint, err error) {
 		stream, addr, err_read := utils.SafeReadFrom(st.dial)
 		err = err_read
 		//logrus.Infof("action: election | status: stream read | result: %s | stream: %s", err, stream)
-		if err == nil && withoutInvites < MaxNoInvites{
+		if err == nil && withoutInvites < MaxNoInvites {
 			err = st.checkInvitation(stream, addr, missing)
 			withoutInvites++
 		} else {
@@ -35,7 +35,7 @@ func (st *Status) runElection() (nextStage uint, err error) {
 			withoutInvites = 0
 		}
 	}
-	
+
 	if st.leaderId == st.id && err == nil {
 		nextStage = Coordinator
 	}

@@ -3,13 +3,13 @@ package invitation
 import "net"
 
 type Config struct {
-	Peers   []uint
-	Id      uint
-	Mapping map[uint]string
-	Conn    *net.UDPConn
+	Peers     []uint
+	Id        uint
+	Mapping   map[uint]string
+	Conn      *net.UDPConn
 	Heartbeat string
-	Name string
-	Names []string
+	Name      string
+	Names     []string
 }
 
 /*

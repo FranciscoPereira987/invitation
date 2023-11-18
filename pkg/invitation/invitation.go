@@ -55,12 +55,12 @@ type Status struct {
 
 	id       uint
 	leaderId uint
-	config *Config
-	control beater.Runable
+	config   *Config
+	control  beater.Runable
 }
 
 func Invitation(config *Config) *Status {
-	control, _ := beater.NewBeaterClient(config.Name, "0.0.0.0:" + config.Heartbeat)
+	control, _ := beater.NewBeaterClient(config.Name, "0.0.0.0:"+config.Heartbeat)
 	//TODO: Add FatalF here
 	control.Run()
 	return &Status{
@@ -68,8 +68,8 @@ func Invitation(config *Config) *Status {
 		id:       config.Id,
 		dial:     config.Conn,
 		leaderId: config.Id,
-		config: config,
-		control: control,
+		config:   config,
+		control:  control,
 	}
 }
 
@@ -80,20 +80,19 @@ func stopBeater(beat beater.Runable) (err error) {
 	return
 }
 
-
 func (st *Status) Run() (err error) {
 	state := Electing
 	lastState := Electing
 	for err == nil {
 		if lastState != state {
 			err := stopBeater(st.control)
-			if err != nil && !errors.Is(err, net.ErrClosed){
+			if err != nil && !errors.Is(err, net.ErrClosed) {
 				logrus.Fatalf("action: stoping beater | result: error | reason: %s", err)
 			}
 			if state == Coordinator {
 				st.control = beater.NewBeaterServer(st.config.Names, st.config.Names, st.config.Heartbeat)
-			}else{
-				st.control, err = beater.NewBeaterClient(st.config.Name, "0.0.0.0:" + st.config.Heartbeat)
+			} else {
+				st.control, err = beater.NewBeaterClient(st.config.Name, "0.0.0.0:"+st.config.Heartbeat)
 				if err != nil {
 					logrus.Fatalf("action: starting beater client | result: fatal | reason: %s", err)
 				}

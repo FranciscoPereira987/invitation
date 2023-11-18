@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ErrTooShort = errors.New("stream too short")
+	ErrTooShort      = errors.New("stream too short")
 	ErrInvalidString = errors.New("invalid string")
 )
 
