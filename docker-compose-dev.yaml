@@ -11,6 +11,7 @@ services:
       - INV_NAME=1
     volumes:
       - ./cmd/heartbeater/config.yaml:/config.yaml
+      - /run/user/1000/docker.sock:/var/run/docker.sock
 
 
   peer2:
@@ -23,6 +24,7 @@ services:
       - INV_NAME=2
     volumes:
       - ./cmd/heartbeater/config.yaml:/config.yaml
+      - /run/user/1000/docker.sock:/var/run/docker.sock
 
 
   peer3:
@@ -35,6 +37,7 @@ services:
       - INV_NAME=3
     volumes:
       - ./cmd/heartbeater/config.yaml:/config.yaml
+      - /run/user/1000/docker.sock:/var/run/docker.sock
 
 
   peer4:
@@ -47,6 +50,7 @@ services:
       - INV_NAME=4
     volumes:
       - ./cmd/heartbeater/config.yaml:/config.yaml
+      - /run/user/1000/docker.sock:/var/run/docker.sock
 
 
   peer5:
@@ -59,6 +63,7 @@ services:
       - INV_NAME=5
     volumes:
       - ./cmd/heartbeater/config.yaml:/config.yaml
+      - /run/user/1000/docker.sock:/var/run/docker.sock
 
 
   peer6:
@@ -71,6 +76,7 @@ services:
       - INV_NAME=6
     volumes:
       - ./cmd/heartbeater/config.yaml:/config.yaml
+      - /run/user/1000/docker.sock:/var/run/docker.sock
 
 
   peer7:
@@ -83,6 +89,7 @@ services:
       - INV_NAME=7
     volumes:
       - ./cmd/heartbeater/config.yaml:/config.yaml
+      - /run/user/1000/docker.sock:/var/run/docker.sock
 
 
   peer8:
@@ -95,6 +102,7 @@ services:
       - INV_NAME=8
     volumes:
       - ./cmd/heartbeater/config.yaml:/config.yaml
+      - /run/user/1000/docker.sock:/var/run/docker.sock
 
 
   peer9:
@@ -107,6 +115,7 @@ services:
       - INV_NAME=9
     volumes:
       - ./cmd/heartbeater/config.yaml:/config.yaml
+      - /run/user/1000/docker.sock:/var/run/docker.sock
 
 
 networks:

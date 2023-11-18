@@ -6,8 +6,6 @@ import (
 	"os"
 
 	"net"
-
-	"github.com/sirupsen/logrus"
 )
 
 /*
@@ -44,7 +42,6 @@ func (st *BeaterClient) run() error {
 		err = err_read
 		if err == nil {
 			if recovered[0] == Heartbeat {
-				logrus.Info("action: client | status: responding to server")
 				err = utils.SafeWriteTo(ok{st.name}.serialize(), st.conn, server)
 			}
 		}

@@ -2,6 +2,7 @@ package beater
 
 import (
 	"errors"
+	"invitation/pkg/dood"
 	"invitation/pkg/utils"
 	"net"
 	"os"
@@ -72,6 +73,8 @@ type BeaterServer struct {
 	port string
 
 	shutdown chan os.Signal
+
+	dood *dood.DooD
 }
 
 /*
@@ -85,6 +88,9 @@ type timer struct {
 	//Outputs a message to be delivered to the client
 	OutboundChan chan *net.UDPAddr
 
+	//Outputs the name to restart the service
+	restartChan chan string
+
 	clientAddr string
 
 	/*
@@ -97,7 +103,7 @@ type timer struct {
 	maxTime time.Duration
 }
 
-func NewTimer(at string, name string) *timer {
+func NewTimer(at string, name string, restart chan string) *timer {
 	t := new(timer)
 
 	t.InboundChan = make(chan bool, 1)
@@ -105,37 +111,51 @@ func NewTimer(at string, name string) *timer {
 	t.clientAddr = at
 	t.name = name
 	t.maxTime = time.Second * 2
+	t.restartChan = restart
 
 	return t
 }
 
-func (t *timer) executeTimer(group *sync.WaitGroup) {
-	defer close(t.OutboundChan)
-	clientAddr, err := net.ResolveUDPAddr("udp", t.clientAddr)
-	for err != nil {
+func (t *timer) resolveAddr() (addr *net.UDPAddr, running bool) {
+	addr, err := net.ResolveUDPAddr("udp", t.clientAddr)
+	running = true
+	if err != nil {
 		logrus.Errorf("action: resolving client address | result: failed | action: re-instantiating client")
+		t.restartChan <- t.name
+	}
+	for err != nil && running {
 		<-time.After(t.maxTime * 5)
-		clientAddr, err = net.ResolveUDPAddr("udp", t.clientAddr)
+		addr, err = net.ResolveUDPAddr("udp", t.clientAddr)
 		select {
 		case <-t.InboundChan:
-			group.Done()
-			return
+			running = false
 		default:
 		}
 	}
-loop:
-	for {
+	return
+}
+
+func (t *timer) executeTimer(group *sync.WaitGroup) {
+	defer close(t.OutboundChan)
+	clientAddr, running := t.resolveAddr()
+	retriesLeft := 3
+
+	for running {
 		timeout := time.After(t.maxTime)
 		t.OutboundChan <- clientAddr
 		select {
 		case <-timeout:
-			logrus.Info("Service is dead")
-		case result := <-t.InboundChan:
-			logrus.Info("Client answered")
-			if !result {
-				logrus.Infof("action: Client %s timer | status: ending", t.clientAddr)
-				break loop
+			retriesLeft--
+			if retriesLeft <= 0 {
+				clientAddr, running = t.resolveAddr()
+			} else {
+				logrus.Infof("action: client %s timer | status: client unresponsive | remaining attempts: %d", t.name, retriesLeft)
 			}
+		case running = <-t.InboundChan:
+			if !running {
+				logrus.Infof("action: Client %s timer | status: ending", t.name)
+			}
+			retriesLeft = 3
 			<-time.After(t.maxTime / 2)
 		}
 	}
@@ -156,12 +176,17 @@ func NewBeaterServer(clients []string, clientAddrs []string, at string) *BeaterS
 
 	addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:"+at)
 	if err != nil {
-		return nil
+		logrus.Fatalf("action: initializing beater server | status: failed | reason: %s", err)
 	}
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
-		return nil
+		logrus.Fatalf("action: initializing beater server | status: failed | reason: %s", err)
 	}
+	doodServer, err := dood.NewDockerClientDefault()
+	if err != nil {
+		logrus.Fatalf("action: initializing beater server | status: failed | reason: %s", err)
+	}
+
 	return &BeaterServer{
 		client_map,
 		clientInfo,
@@ -170,17 +195,18 @@ func NewBeaterServer(clients []string, clientAddrs []string, at string) *BeaterS
 		make(chan error, 1),
 		at,
 		nil,
+		doodServer,
 	}
 }
 
 /*
 Initiates timers and merge channels
 */
-func (b *BeaterServer) initiateTimers(port string) chan *net.UDPAddr {
+func (b *BeaterServer) initiateTimers(port string, dockerChan chan string) chan *net.UDPAddr {
 	mergedChans := make([](<-chan *net.UDPAddr), 0)
 	for _, value := range b.clientInfo {
 
-		timer := NewTimer(value.Addr+":"+port, value.Name)
+		timer := NewTimer(value.Addr+":"+port, value.Name, dockerChan)
 
 		b.clients[value.Name] = timer
 		mergedChans = append(mergedChans, timer.OutboundChan)
@@ -240,7 +266,9 @@ func (b *BeaterServer) writeRoutine(channel <-chan *net.UDPAddr) {
 }
 
 func (b *BeaterServer) run(port string) (err error) {
-	timersChan := b.initiateTimers(port)
+	dockerChan := b.dood.StartIncoming()
+	defer close(dockerChan)
+	timersChan := b.initiateTimers(port, dockerChan)
 	defer close(timersChan)
 	readerChan := b.initiateReader()
 	defer close(readerChan)
